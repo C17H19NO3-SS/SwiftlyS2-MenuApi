@@ -219,37 +219,6 @@ public class MenuManager
         return HookResult.Continue;
     }
 
-    public HookResult HandleChatInput(int playerId, string text)
-    {
-        if (!_sessions.TryGetValue(playerId, out var session))
-        {
-            return HookResult.Continue;
-        }
-
-        if (!session.CurrentMenu.AllowChatSelection)
-        {
-            return HookResult.Continue;
-        }
-
-        string trimmed = (text ?? string.Empty).Trim();
-        if (trimmed.StartsWith("!") || trimmed.StartsWith("/"))
-        {
-            trimmed = trimmed[1..].Trim();
-        }
-
-        if (int.TryParse(trimmed, out int num))
-        {
-            if (num >= 0 && num <= 9)
-            {
-                int mappedSlot = (num == 0) ? 10 : num;
-                HandleSlotCommand(playerId, mappedSlot);
-                return HookResult.Handled; // Sohbet kutusuna yazılmasını tamamen engelle (gizle)!
-            }
-        }
-
-        return HookResult.Continue;
-    }
-
     private void ExecuteSlot(MenuSession session, int slotNumber)
     {
         var player = session.Player;

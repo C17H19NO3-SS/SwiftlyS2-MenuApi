@@ -26,8 +26,6 @@ public sealed class Plugin(ISwiftlyCore core) : BasePlugin(core)
     public MenuManager MenuManager { get; private set; } = null!;
     public IMenuApi MenuApi { get; private set; } = null!;
 
-    private Guid _clientCommandHookGuid;
-    private Guid _clientChatHookGuid;
     private readonly List<Guid> _commandGuids = new();
 
     public override void ConfigureSharedInterface(IInterfaceManager interfaceManager)
@@ -49,40 +47,27 @@ public sealed class Plugin(ISwiftlyCore core) : BasePlugin(core)
             MenuApi = new MenuApiImpl(MenuManager);
         }
 
-        // 1. Client komut hook'u (slot1 - slot10 silah tuslari yakalama ve console komutlari)
-        _clientCommandHookGuid = Core.Command.HookClientCommand(OnClientCommand);
-
-        // 2. Client sohbet hook'u (!menu, /menu, 1, 2.. chat secimleri)
-        _clientChatHookGuid = Core.Command.HookClientChat(OnClientChat);
-
-        // 3. Tick dongusu
+        // 1. Tick dongusu (Flicker fix ve session timeout/render)
         Core.Event.OnTick += OnTick;
 
-        // 4. Konsol Komutlari
-        RegisterCommand("menuhud", OnMenuHudCommand, "Custom Panorama HUD layoutu yukler: sw_menuhud <layout_xml_path>");
+        // 2. Konsol secim komutu: sw_select <1-10> (Konsoldan bind tuslari icin: bind 1 "sw_select 1")
         RegisterCommand("select", OnSelectCommand, "Menude secim yapar: sw_select <1-10>");
+
+        // 3. Hizli slot ve sohbet komutlari: sw_1 .. sw_9, sw_0 (Sohbetten !1 .. !9, !0 secimleri)
+        RegisterSlotCommands();
+
+        // 4. Custom Panorama HUD yukleme komutu: sw_menuhud <layout_xml_path>
+        RegisterCommand("menuhud", OnMenuHudCommand, "Custom Panorama HUD layoutu yukler: sw_menuhud <layout_xml_path>");
 
         // 5. Oyuncu olumunde menuyu temizle
         Core.GameEvent.HookPost<EventPlayerDeath>(OnPlayerDeath);
 
         Core.Logger.LogInformation(
-            "[MenuApi] v1.3.1 basariyla yuklendi ve Shared API servisi aktif! (HotReload: {HotReload})", hotReload);
+            "[MenuApi] v1.3.1 basariyla yuklendi ve optimize komut dinleyicileri aktif! (HotReload: {HotReload})", hotReload);
     }
 
     public override void Unload()
     {
-        if (_clientCommandHookGuid != Guid.Empty)
-        {
-            try { Core.Command.UnhookClientCommand(_clientCommandHookGuid); } catch { }
-            _clientCommandHookGuid = Guid.Empty;
-        }
-
-        if (_clientChatHookGuid != Guid.Empty)
-        {
-            try { Core.Command.UnhookClientChat(_clientChatHookGuid); } catch { }
-            _clientChatHookGuid = Guid.Empty;
-        }
-
         Core.Event.OnTick -= OnTick;
 
         foreach (var guid in _commandGuids)
@@ -112,78 +97,59 @@ public sealed class Plugin(ISwiftlyCore core) : BasePlugin(core)
         MenuManager?.OnTick();
     }
 
-    private HookResult OnClientCommand(int playerId, string commandLine)
+    private void RegisterSlotCommands()
     {
-        if (string.IsNullOrWhiteSpace(commandLine))
-            return HookResult.Continue;
-
-        string cmd = commandLine.Trim().Trim('"').Trim(';').Trim();
-
-        // Silah tuslari ve secim komutlari:
-        // - slot1, slot2 ... slot10, slot0
-        // - select1, select2 ... select10, select0
-        // - select 1..10, menuselect 1..10, sw_select 1..10
-        int slotNum = -1;
-
-        if (cmd.StartsWith("slot", StringComparison.OrdinalIgnoreCase))
+        for (int i = 1; i <= 9; i++)
         {
-            string slotStr = cmd.Substring(4).Trim();
-            int.TryParse(slotStr, out slotNum);
-        }
-        else if (cmd.StartsWith("select", StringComparison.OrdinalIgnoreCase))
-        {
-            string rem = cmd.Substring(6).Trim();
-            int.TryParse(rem, out slotNum);
-        }
-        else if (cmd.StartsWith("menuselect", StringComparison.OrdinalIgnoreCase))
-        {
-            string rem = cmd.Substring(10).Trim();
-            int.TryParse(rem, out slotNum);
-        }
-        else if (cmd.StartsWith("sw_select", StringComparison.OrdinalIgnoreCase))
-        {
-            string rem = cmd.Substring(9).Trim();
-            int.TryParse(rem, out slotNum);
+            int slot = i;
+            RegisterCommand(slot.ToString(), ctx => OnDirectSlotCommand(ctx, slot), $"Menude {slot}. secenegi secer: sw_{slot} veya !{slot}");
         }
 
-        if (slotNum != -1)
-        {
-            Core.Logger.LogInformation("[MenuApi] Komut yakalandi: Cmd='{Cmd}', Player={PlayerId}, Slot={Slot}", cmd, playerId, slotNum);
-            return MenuManager.HandleSlotCommand(playerId, slotNum);
-        }
-
-        return HookResult.Continue;
+        RegisterCommand("0", ctx => OnDirectSlotCommand(ctx, 10), "Menuden cikar: sw_0 veya !0");
+        RegisterCommand("10", ctx => OnDirectSlotCommand(ctx, 10), "Menuden cikar: sw_10 veya !10");
     }
 
-    private HookResult OnClientChat(int playerId, string text, bool teamOnly)
+    private void OnDirectSlotCommand(ICommandContext ctx, int slotNum)
     {
-        if (string.IsNullOrWhiteSpace(text))
-            return HookResult.Continue;
+        if (!ctx.IsSentByPlayer || ctx.Sender == null)
+            return;
 
-        string trimmed = text.Trim();
-
-        // 1 .. 9, 0 veya !1 .. !9, !0 veya /1 .. /9, /0 chat secimleri:
-        // Eger menu aciksa secimi yap ve sohbeti TAMAMEN gizle (chate gitmesin)!
-        string numStr = trimmed;
-        if (numStr.StartsWith("!") || numStr.StartsWith("/"))
+        if (MenuManager.HasActiveMenu(ctx.Sender))
         {
-            numStr = numStr[1..].Trim();
+            MenuManager.HandleSlotCommand(ctx.Sender.PlayerID, slotNum);
+        }
+    }
+
+    private void OnSelectCommand(ICommandContext ctx)
+    {
+        if (!ctx.IsSentByPlayer || ctx.Sender == null)
+            return;
+
+        if (ctx.Args.Length == 0 || !int.TryParse(ctx.Args[0], out int slotNum))
+            return;
+
+        int mappedSlot = (slotNum == 0) ? 10 : slotNum;
+        MenuManager.HandleSlotCommand(ctx.Sender.PlayerID, mappedSlot);
+    }
+
+    private void OnMenuHudCommand(ICommandContext ctx)
+    {
+        if (ctx.Args.Length == 0)
+        {
+            ctx.Reply("[MenuApi] Kullanim: sw_menuhud <panorama_layout_xml_yolu> (Ornek: panorama/layout/custom_game/menu.xml)");
+            return;
         }
 
-        if (int.TryParse(numStr, out int num) && num >= 0 && num <= 9)
+        string layoutPath = ctx.Args[0];
+        bool ok = MenuManager.CustomHud.Initialize(layoutPath);
+        if (ok)
         {
-            int mappedSlot = (num == 0) ? 10 : num;
-            
-            var player = Core.PlayerManager.GetPlayer(playerId);
-            if (player != null && player.IsValid && MenuManager.HasActiveMenu(player))
-            {
-                MenuManager.HandleSlotCommand(playerId, mappedSlot);
-            }
-
-            return HookResult.Handled;
+            ctx.Reply($"[MenuApi] CCSCustomHudLayout basariyla aktif edildi: {layoutPath}");
         }
-
-        return MenuManager.HandleChatInput(playerId, text);
+        else
+        {
+            ctx.Reply($"[MenuApi] CCSCustomHudLayout olusturulamadi: {layoutPath}");
+        }
     }
 
     private HookResult OnPlayerDeath(EventPlayerDeath @event)
@@ -206,43 +172,6 @@ public sealed class Plugin(ISwiftlyCore core) : BasePlugin(core)
         catch (Exception ex)
         {
             Core.Logger.LogError(ex, "[MenuApi] Komut kaydederken hata: {Name}", name);
-        }
-    }
-
-    private void OnSelectCommand(ICommandContext ctx)
-    {
-        if (!ctx.IsSentByPlayer || ctx.Sender == null)
-        {
-            ctx.Reply("[MenuApi] Bu komut sadece oyuncular tarafindan kullanilabilir.");
-            return;
-        }
-
-        if (ctx.Args.Length == 0 || !int.TryParse(ctx.Args[0], out int slotNum))
-        {
-            ctx.Reply("[MenuApi] Kullanim: sw_select <1-10>");
-            return;
-        }
-
-        MenuManager.HandleSlotCommand(ctx.Sender.PlayerID, slotNum);
-    }
-
-    private void OnMenuHudCommand(ICommandContext ctx)
-    {
-        if (ctx.Args.Length == 0)
-        {
-            ctx.Reply("[MenuApi] Kullanim: sw_menuhud <panorama_layout_xml_yolu> (Ornek: panorama/layout/custom_game/menu.xml)");
-            return;
-        }
-
-        string layoutPath = ctx.Args[0];
-        bool ok = MenuManager.CustomHud.Initialize(layoutPath);
-        if (ok)
-        {
-            ctx.Reply($"[MenuApi] CCSCustomHudLayout basariyla aktif edildi: {layoutPath}");
-        }
-        else
-        {
-            ctx.Reply($"[MenuApi] CCSCustomHudLayout olusturulamadi: {layoutPath}");
         }
     }
 }

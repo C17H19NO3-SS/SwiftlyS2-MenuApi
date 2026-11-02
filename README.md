@@ -94,8 +94,19 @@ public void OpenVipMenu(IPlayer player)
 
 ---
 
-## 🎮 Konsol Komutları
+## 🎮 Konsol ve Sohbet Komutları
 
-- `sw_select <1-10>`: Menüde konsol üzerinden seçim yapar (örn. `sw_select 1`).
-- `sw_menuhud <xml_path>`: Özel Panorama XML HUD layoutunu bağlar (Örn: `sw_menuhud panorama/layout/custom_game/menu.xml`).
+Eklenti her istemci komutunu ve sohbet mesajını dinleyip (hook) sunucuyu yormak yerine **yüksek performanslı ve optimize komut dinleyicileri** kullanır:
+
+- **Konsol Bind Seçimi:**
+  - `sw_select <1-10>`: Menüde konsol üzerinden seçim yapar (Örn: `bind 1 "sw_select 1"`, `bind 2 "sw_select 2"`).
+  - `sw_1` .. `sw_7`: Seçenekleri seçer.
+  - `sw_8`: Geri (Önceki sayfa veya üst menü).
+  - `sw_9`: İleri (Sonraki sayfa).
+  - `sw_0` veya `sw_10`: Menüden çıkar.
+- **Sohbet Seçimi:**
+  - Menü açıkken sohbete `!1` .. `!7` (seçenekler), `!8` (Geri), `!9` (İleri), `!0` (Çıkış) yazarak da seçim yapılabilir.
+- **Panorama HUD Layout:**
+  - `sw_menuhud <xml_path>`: Özel Panorama XML HUD layoutunu bağlar (Örn: `sw_menuhud panorama/layout/custom_game/menu.xml`).
+
 

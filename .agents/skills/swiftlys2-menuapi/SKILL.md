@@ -19,9 +19,9 @@ This skill is the authoritative, production-grade guide for consuming and buildi
 `MenuApi` is registered as a first-class **Shared Interface** in SwiftlyS2. Any other plugin running on the server can consume `IMenuApi` without tight binary coupling.
 
 ### Key Capabilities
-- **1-7 Weapon Slot Selection:** Players select items with weapon slot keys (`1` through `7`), `8` for Back, `9` for Next, and `0` for Exit.
-- **Zero Movement Interference:** Players move (`WASD`), jump, and shoot completely freely while menus are open.
-- **Silent Chat Support:** Players can also type `1-9` or `!1-!9` in chat; selections are captured and suppressed (`HookResult.Handled`) without cluttering chat history.
+- **Zero Global Hook Overhead:** No global `HookClientCommand` or `HookClientChat` listening; operations are purely command-driven for maximum server performance.
+- **Console Bind Support (`sw_select` & `sw_1`..`sw_0`):** Players bind keys cleanly (e.g. `bind 1 "sw_select 1"`, `bind 8 "sw_select 8"`, `bind 0 "sw_select 0"`) or run `sw_1`..`sw_9`, `sw_0`.
+- **Chat Selection (`!1`..`!9`, `!0`):** Players can type `!1`..`!7` for options, `!8` for Back, `!9` for Next, `!0` for Exit directly in chat.
 - **Dynamic Themes (`MenuTheme`):** Valve nostalgic gold theme, Blue, Green, Red, Purple presets, or custom hex colors and pixel/Panorama font sizes.
 - **Hierarchical Submenus:** Built-in history stack (`Stack<(IMenu, int)>`). Pressing `8. Geri` on page 1 of a submenu automatically navigates back to the parent menu.
 - **Custom HUD Support:** Optional `CCSCustomHudLayout` entity support for dedicated Panorama XML designs alongside standard CenterHTML.
